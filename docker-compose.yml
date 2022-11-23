@@ -1,0 +1,64 @@
+---
+version: '3'
+services:
+  nats-1:
+    container_name: nats-1
+    image: "nats:2.9.0"
+    entrypoint: /nats-server
+    command: --name NATS-1 --cluster_name NATS --js --sd /data --cluster nats://0.0.0.0:4245 --routes nats://nats-1:4245,nats://nats-2:4245,nats://nats-3:4245 -p 4222 -m 8222 -c /nats-server.conf
+    networks:
+      - nats
+    ports:
+      - 4222:4222
+      - 18222:8222
+      - 2883:1883
+    volumes:
+      - ./jetstream-cluster/nats-1:/data
+      - ./configs/nats-1.conf:/nats-server.conf
+
+  nats-2:
+    container_name: nats-2
+    image: "nats:2.9.0"
+    entrypoint: /nats-server
+    command: --name NATS-2 --cluster_name NATS --js --sd /data --cluster nats://0.0.0.0:4245 --routes nats://nats-1:4245,nats://nats-2:4245,nats://nats-3:4245 -p 4222 -m 8222 -c /nats-server.conf
+    networks:
+      - nats
+    ports:
+      - 4223:4222
+      - 28222:8222
+      - 3883:1883
+    volumes:
+      - ./jetstream-cluster/nats-2:/data
+      - ./configs/nats-2.conf:/nats-server.conf
+
+  nats-3:
+    container_name: nats-3
+    image: "nats:2.9.0"
+    entrypoint: /nats-server
+    command: --name NATS-3 --cluster_name NATS --js --sd /data --cluster nats://0.0.0.0:4245 --routes nats://nats-1:4245,nats://nats-2:4245,nats://nats-3:4245 -p 4222 -m 8222 -c /nats-server.conf
+    networks:
+      - nats
+    ports:
+      - 4224:4222
+      - 38222:8222
+      - 4883:1883
+    volumes:
+      - ./jetstream-cluster/nats-3:/data
+      - ./configs/nats-3.conf:/nats-server.conf
+
+  mqtt-broker:
+    container_name: mqtt-broker
+    image: "nats:2.9.0"
+    entrypoint: /nats-server
+    command: --name MQTT-BROKER --js --sd /data -p 4222 -m 8222 -c /nats-server.conf
+    networks:
+      - nats
+    ports:
+      - 1883:1883
+      - 48222:8222
+    volumes:
+      - ./jetstream-cluster/mqtt-broker:/data
+      - ./configs/mqtt-broker.conf:/nats-server.conf
+
+networks:
+  nats: {}
