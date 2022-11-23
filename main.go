@@ -50,7 +50,8 @@ func main() {
 	mqttClient.Connect()
 
 	nc, _ := nats.Connect(*natsURL)
-	js, _ := nc.JetStream()
+	js, _ := nc.JetStream(nats.PublishAsyncMaxPending(512))
+
 	
 	streamInfo , err := js.AddStream(&nats.StreamConfig{
 		Name:     *natsStreamName,
@@ -65,7 +66,7 @@ func main() {
 
 
 	mqttClient.Connection.Subscribe(*targetTopic, byte(*qos), func(c mqtt.Client, m mqtt.Message) {
-		_, err := js.Publish(*natsStreamName, m.Payload())
+		_, err := js.PublishAsync(*natsStreamName, m.Payload())
 		if err != nil {
 			fmt.Println("Nats publish error:", err)
 		}
