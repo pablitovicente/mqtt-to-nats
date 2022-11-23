@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -19,6 +20,7 @@ func main() {
 	port := flag.Int("p", 1883, "MQTT port")
 	qos := flag.Int("q", 1, "MQTT QoS used by all clients")
 	natsURL := flag.String("N", "nats://localhost:4222", "NATS Stream server url for example nats://localhost:4222")
+	natsStreamName := flag.String("SN", "collector", "NATS Stream name used to store MQTT forwarded messages")
 
 	flag.Parse()
 
@@ -48,9 +50,25 @@ func main() {
 	mqttClient.Connect()
 
 	nc, _ := nats.Connect(*natsURL)
+	js, _ := nc.JetStream()
+	
+	streamInfo , err := js.AddStream(&nats.StreamConfig{
+		Name:     *natsStreamName,
+		Subjects: []string{*natsStreamName},
+		Replicas: 3,
+	})
+
+	if err != nil {
+		fmt.Println("Error creating NATS Stream:", err)
+	}
+	fmt.Println("Stream info", streamInfo)
+
 
 	mqttClient.Connection.Subscribe(*targetTopic, byte(*qos), func(c mqtt.Client, m mqtt.Message) {
-		nc.Publish("foo", m.Payload())
+		_, err := js.Publish(*natsStreamName, m.Payload())
+		if err != nil {
+			fmt.Println("Nats publish error:", err)
+		}
 	})
 
 	select {}
