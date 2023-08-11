@@ -8,15 +8,35 @@ This program subscribes to an MQTT topic and republishes all incoming messages t
 
 ## Build
 
-- `./build_all.sh` will generate the binary `mqtt-to-nats`
+```
+./build_all.sh
+```
+will generate the binary `mqtt-to-nats`
 
 ## Run
 
-- `./mqtt-to-nats --help` will show all the supported options for the program
+```
+./mqtt-to-nats --help
+```
+will show all the supported options for the program
 
 ## Docker image
 
-- TBD
+
+### Build
+
+```
+docker build -t mqtt-to-nats .
+```
+will build the `mqtt-to-nats` docker image based on alpine.
+
+### Run
+
+```
+docker run --rm mqtt-to-nats -h <mqtt_broker> -t <topic> -N <nats_url> -SN <stream_name>
+```
+will run a docker container forwarding all messages from an MQTT broker to a NATS stream.
+
 
 ## TODO
 
