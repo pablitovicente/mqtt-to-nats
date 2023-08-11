@@ -21,6 +21,7 @@ func main() {
 	qos := flag.Int("q", 1, "MQTT QoS used by all clients")
 	natsURL := flag.String("N", "nats://localhost:4222", "NATS Stream server url for example nats://localhost:4222")
 	natsStreamName := flag.String("SN", "collector", "NATS Stream name used to store MQTT forwarded messages")
+	natsStreamReplicas := flag.Int("R", 1, "Number of NATS Stream replicas")
 
 	flag.Parse()
 
@@ -52,18 +53,16 @@ func main() {
 	nc, _ := nats.Connect(*natsURL)
 	js, _ := nc.JetStream(nats.PublishAsyncMaxPending(512))
 
-	
-	streamInfo , err := js.AddStream(&nats.StreamConfig{
+	streamInfo, err := js.AddStream(&nats.StreamConfig{
 		Name:     *natsStreamName,
 		Subjects: []string{*natsStreamName},
-		Replicas: 3,
+		Replicas: *natsStreamReplicas,
 	})
 
 	if err != nil {
 		fmt.Println("Error creating NATS Stream:", err)
 	}
 	fmt.Println("Stream info", streamInfo)
-
 
 	mqttClient.Connection.Subscribe(*targetTopic, byte(*qos), func(c mqtt.Client, m mqtt.Message) {
 		_, err := js.PublishAsync(*natsStreamName, m.Payload())
