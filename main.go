@@ -22,8 +22,19 @@ func main() {
 	natsURL := flag.String("N", "nats://localhost:4222", "NATS Stream server url for example nats://localhost:4222")
 	natsStreamName := flag.String("SN", "collector", "NATS Stream name used to store MQTT forwarded messages")
 	natsStreamReplicas := flag.Int("R", 1, "Number of NATS Stream replicas")
+	natsStreamStorage := flag.String("S", "file", "The storage used for the stream it can be either 'memory' or 'file'")
+	maxInflightMessages := flag.Int("bufferSize", 1024, "The size of the buffer the NATS client will use before blocking")
 
 	flag.Parse()
+
+	var storageType nats.StorageType
+	if *natsStreamStorage == "file" {
+		storageType = nats.FileStorage
+	} else if *natsStreamStorage == "memory" {
+		storageType = nats.MemoryStorage
+	} else {
+		panic("'S' parameter needs to be either 'file' or 'memory'")
+	}
 
 	if *qos < 0 || *qos > 2 {
 		panic("QoS should be any of [0, 1, 2]")
@@ -51,12 +62,13 @@ func main() {
 	mqttClient.Connect()
 
 	nc, _ := nats.Connect(*natsURL)
-	js, _ := nc.JetStream(nats.PublishAsyncMaxPending(512))
+	js, _ := nc.JetStream(nats.PublishAsyncMaxPending(*maxInflightMessages))
 
 	streamInfo, err := js.AddStream(&nats.StreamConfig{
 		Name:     *natsStreamName,
 		Subjects: []string{*natsStreamName},
 		Replicas: *natsStreamReplicas,
+		Storage:  storageType,
 	})
 
 	if err != nil {
