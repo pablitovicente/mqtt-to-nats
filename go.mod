@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.4.2
-	github.com/nats-io/nats.go v1.33.1
+	github.com/nats-io/nats.go v1.34.1
 	github.com/pablitovicente/mqtt-load-generator v1.0.6
 )
 
