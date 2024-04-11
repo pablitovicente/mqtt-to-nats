@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -8,6 +9,7 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	MQTTClient "github.com/pablitovicente/mqtt-load-generator/pkg/MQTTClient"
 )
 
@@ -35,11 +37,11 @@ func main() {
 
 	flag.Parse()
 
-	var storageType nats.StorageType
+	var storageType jetstream.StorageType
 	if *natsStreamStorage == "file" {
-		storageType = nats.FileStorage
+		storageType = jetstream.FileStorage
 	} else if *natsStreamStorage == "memory" {
-		storageType = nats.MemoryStorage
+		storageType = jetstream.MemoryStorage
 	} else {
 		panic("'S' parameter needs to be either 'file' or 'memory'")
 	}
@@ -80,10 +82,18 @@ func main() {
 
 	mqttClient.Connect()
 
-	nc, _ := nats.Connect(*natsURL)
-	js, _ := nc.JetStream(nats.PublishAsyncMaxPending(*maxInflightMessages))
+	nc, err := nats.Connect(*natsURL)
 
-	_, err := js.AddStream(&nats.StreamConfig{
+	if err != nil {
+		panic("Not able to connect to NATS")
+	}
+
+	js, _ := jetstream.New(nc, jetstream.WithPublishAsyncMaxPending(*maxInflightMessages))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_, err = js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:     *natsStreamName,
 		Subjects: []string{*natsStreamName},
 		Replicas: *natsStreamReplicas,
