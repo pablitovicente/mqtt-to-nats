@@ -82,6 +82,20 @@ func TestValidatePrefix(t *testing.T) {
 	}
 }
 
+func TestValidateSubject(t *testing.T) {
+	for _, subject := range []string{"TELEMETRY", "mqtt.telemetry"} {
+		if err := ValidateSubject(subject); err != nil {
+			t.Errorf("ValidateSubject(%q) = %v, want no error", subject, err)
+		}
+	}
+
+	for _, subject := range []string{"", "a.*", "a.>", "a b", "$JS.API.x"} {
+		if err := ValidateSubject(subject); err == nil {
+			t.Errorf("ValidateSubject(%q) = nil, want an error", subject)
+		}
+	}
+}
+
 func TestStreamSubjects(t *testing.T) {
 	tests := []struct {
 		filter string

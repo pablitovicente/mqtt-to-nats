@@ -68,6 +68,26 @@ func TestRoot_Defaults(t *testing.T) {
 	if settings.Connection.CleanSession {
 		t.Error("cleanSession defaults to true, want false")
 	}
+
+	if settings.Bridge.Ordered {
+		t.Error("ordered defaults to true, want false")
+	}
+}
+
+func TestRoot_FixedSubjectLike1x(t *testing.T) {
+	settings, err := runCommand(t, "-t", "#", "--stream", "TELEMETRY", "--subject", "TELEMETRY", "--ordered")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []Route{{Name: "TELEMETRY", Filter: "#", Stream: "TELEMETRY", Subject: "TELEMETRY", QoS: 1}}
+	if !slices.Equal(settings.Routes, want) {
+		t.Errorf("routes = %+v, want %+v", settings.Routes, want)
+	}
+
+	if !settings.toBridgeConfig().MQTT.Ordered {
+		t.Error("MQTT options have Ordered false, want true from --ordered")
+	}
 }
 
 func TestRoot_RoutesFile(t *testing.T) {
@@ -129,6 +149,21 @@ func TestRoot_Errors(t *testing.T) {
 			name:        "overlapping subjects through a prefix",
 			routesFile:  pointerTo("routes:\n  - name: a\n    filter: a/#\n  - name: b\n    filter: x/#\n    prefix: a\n"),
 			errorPhrase: "both produce NATS subjects",
+		},
+		{
+			name:        "same fixed subject in two routes",
+			routesFile:  pointerTo("routes:\n  - name: a\n    filter: a/#\n    subject: X\n  - name: b\n    filter: b/#\n    subject: X\n"),
+			errorPhrase: "both produce NATS subjects",
+		},
+		{
+			name:        "subject with prefix",
+			args:        []string{"--subject", "X", "--prefix", "mqtt"},
+			errorPhrase: "not both",
+		},
+		{
+			name:        "subject with wildcard",
+			args:        []string{"--subject", "a.*"},
+			errorPhrase: "subject",
 		},
 		{
 			name:        "duplicate names",

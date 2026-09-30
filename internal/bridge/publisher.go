@@ -43,6 +43,7 @@ type pendingPublish struct {
 type publisher struct {
 	routeName       string
 	prefix          string
+	fixedSubject    string
 	jetStream       jetStreamPublisher
 	queue           *queue
 	duplicateWindow time.Duration
@@ -58,10 +59,11 @@ type publisher struct {
 	failed  atomic.Uint64
 }
 
-func newPublisher(routeName, prefix string, jetStream jetStreamPublisher, messageQueue *queue, duplicateWindow time.Duration, logger *slog.Logger) *publisher {
+func newPublisher(routeName, prefix, fixedSubject string, jetStream jetStreamPublisher, messageQueue *queue, duplicateWindow time.Duration, logger *slog.Logger) *publisher {
 	return &publisher{
 		routeName:       routeName,
 		prefix:          prefix,
+		fixedSubject:    fixedSubject,
 		jetStream:       jetStream,
 		queue:           messageQueue,
 		duplicateWindow: duplicateWindow,
@@ -107,7 +109,12 @@ func (publisher *publisher) publishWhatIsLeft(ctx context.Context, pending chan<
 }
 
 func (publisher *publisher) publish(ctx context.Context, received message, pending chan<- pendingPublish) {
-	msg := nats.NewMsg(topics.TopicToSubject(publisher.prefix, received.topic))
+	subject := publisher.fixedSubject
+	if subject == "" {
+		subject = topics.TopicToSubject(publisher.prefix, received.topic)
+	}
+
+	msg := nats.NewMsg(subject)
 	msg.Data = received.payload
 
 	publisher.nextMessageID++

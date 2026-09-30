@@ -18,7 +18,7 @@ type runFunc func(ctx context.Context, settings Settings) error
 
 // routeFlagNames are the flags that describe the single route built from flags. They can't be
 // combined with --routes.
-var routeFlagNames = []string{"topic", "qos", "stream", "prefix"}
+var routeFlagNames = []string{"topic", "qos", "stream", "prefix", "subject"}
 
 // NewRootCommand builds the mqtt-to-nats command. It has no subcommands.
 func NewRootCommand() *cobra.Command {
@@ -42,7 +42,7 @@ func newRootCommand(run runFunc) *cobra.Command {
 		Short: "Forward MQTT messages to NATS JetStream streams",
 		Long: "Subscribes to one or more MQTT topic filters, each with its own client, and stores " +
 			"every received message in a NATS JetStream stream.\n\n" +
-			"One route comes from --topic, --qos, --stream and --prefix. For several, list them in a " +
+			"One route comes from --topic, --qos, --stream, --prefix and --subject. For several, list them in a " +
 			"YAML file given with --routes.",
 		Args: cobra.NoArgs,
 
@@ -152,6 +152,10 @@ func registerNATSFlags(flags *pflag.FlagSet, nats *NATS) {
 }
 
 func registerBridgeFlags(flags *pflag.FlagSet, bridge *Bridge) {
+	flags.BoolVar(&bridge.Ordered, "ordered", false,
+		"Take in each client's messages one at a time, in the order they arrive. Off by default: the "+
+			"MQTT library then handles every message on its own goroutine, which is faster, and "+
+			"messages can reach NATS in a different order")
 	flags.IntVar(&bridge.QueueSize, "queue-size", 100000,
 		"Messages each client can hold in memory between MQTT and NATS")
 	flags.StringVar(&bridge.DropPolicy, "drop", "newest",
@@ -166,5 +170,8 @@ func registerRouteFlags(flags *pflag.FlagSet, route *Route, routesFilePath *stri
 	flags.IntVarP(&route.QoS, "qos", "q", 1, "MQTT QoS for the subscription (0, 1 or 2)")
 	flags.StringVar(&route.Stream, "stream", "collector", "NATS stream name; also the route name in client IDs and stats")
 	flags.StringVar(&route.Prefix, "prefix", "", "Put this in front of every NATS subject, followed by '.'")
-	flags.StringVar(routesFilePath, "routes", "", "YAML file listing several routes (instead of --topic, --qos, --stream, --prefix)")
+	flags.StringVar(&route.Subject, "subject", "",
+		"Publish every message to this one NATS subject instead of a subject built from its topic, as 1.x did")
+	flags.StringVar(routesFilePath, "routes", "",
+		"YAML file listing several routes (instead of --topic, --qos, --stream, --prefix, --subject)")
 }

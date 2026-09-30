@@ -29,6 +29,7 @@ func TestCreateStreams(t *testing.T) {
 		{Name: "telemetry", Filter: "telemetry/#", Stream: "telemetry"},
 		{Name: "events", Filter: "events/+/door", Stream: "shared", Prefix: "mqtt"},
 		{Name: "alarms", Filter: "alarms/#", Stream: "shared", Prefix: "mqtt"},
+		{Name: "doors", Filter: "doors/#", Stream: "shared", Subject: "DOORS"},
 	}
 	settings := StreamSettings{Replicas: 3, Storage: "memory", DuplicateWindow: 20 * time.Second}
 
@@ -45,7 +46,7 @@ func TestCreateStreams(t *testing.T) {
 
 	wantSubjects := map[string][]string{
 		"telemetry": {"telemetry.>", "telemetry"},
-		"shared":    {"mqtt.events.*.door", "mqtt.alarms.>", "mqtt.alarms"},
+		"shared":    {"mqtt.events.*.door", "mqtt.alarms.>", "mqtt.alarms", "DOORS"},
 	}
 	for _, config := range creator.configs {
 		if !slices.Equal(config.Subjects, wantSubjects[config.Name]) {

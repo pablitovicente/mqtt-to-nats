@@ -46,6 +46,7 @@ type NATS struct {
 
 // Bridge holds the settings for moving messages from MQTT to NATS.
 type Bridge struct {
+	Ordered         bool
 	QueueSize       int
 	DropPolicy      string
 	StatsInterval   time.Duration
@@ -54,11 +55,12 @@ type Bridge struct {
 
 // Route is one MQTT topic filter, read by its own client and stored in a NATS stream.
 type Route struct {
-	Name   string
-	Filter string
-	Stream string
-	Prefix string
-	QoS    int
+	Name    string
+	Filter  string
+	Stream  string
+	Prefix  string
+	Subject string
+	QoS     int
 }
 
 // Settings is everything the bridge needs to run, after flags and the routes file are read
@@ -192,7 +194,7 @@ func validateRoutes(routes []Route) error {
 			}
 
 			if subject, overlaps := streamSubjectsOverlap(routes[first], routes[second]); overlaps {
-				return fmt.Errorf("routes %q and %q both produce NATS subjects matching %q; give one of them a different prefix",
+				return fmt.Errorf("routes %q and %q both produce NATS subjects matching %q; give one of them a different prefix or subject",
 					routes[first].Name, routes[second].Name, subject)
 			}
 		}
@@ -201,12 +203,13 @@ func validateRoutes(routes []Route) error {
 	return nil
 }
 
-// streamSubjectsOverlap reports whether two routes' stream subjects overlap, which prefixes can
-// cause even when the MQTT filters don't: a/# with no prefix and x/# with prefix "a" both give
-// a.x.... It returns one of the overlapping subjects for the error message.
+// streamSubjectsOverlap reports whether two routes' stream subjects overlap, which prefixes and
+// fixed subjects can cause even when the MQTT filters don't: a/# with no prefix and x/# with
+// prefix "a" both give a.x..., and two routes with the same fixed subject clash. It returns one
+// of the overlapping subjects for the error message.
 func streamSubjectsOverlap(first, second Route) (string, bool) {
-	for _, firstSubject := range topics.StreamSubjects(first.Filter, first.Prefix) {
-		for _, secondSubject := range topics.StreamSubjects(second.Filter, second.Prefix) {
+	for _, firstSubject := range bridge.Route(first).StreamSubjects() {
+		for _, secondSubject := range bridge.Route(second).StreamSubjects() {
 			if topics.SubjectsOverlap(firstSubject, secondSubject) {
 				return firstSubject, true
 			}
@@ -235,7 +238,18 @@ func (route *Route) validate() error {
 		}
 	}
 
-	if route.Prefix == "" && topics.NeedsPrefix(route.Filter) {
+	if route.Subject != "" {
+		if route.Prefix != "" {
+			return fmt.Errorf("route %q: give a prefix or a subject, not both", route.Name)
+		}
+
+		if err := topics.ValidateSubject(route.Subject); err != nil {
+			return fmt.Errorf("route %q: %w", route.Name, err)
+		}
+	}
+
+	// A fixed subject doesn't depend on the filter, so a filter like '#' is fine without a prefix.
+	if route.Prefix == "" && route.Subject == "" && topics.NeedsPrefix(route.Filter) {
 		return fmt.Errorf("route %q: filter %q needs a prefix, because a first level of '+', '#' or one starting "+
 			"with '$' would give stream subjects that overlap NATS's own $JS.API subjects", route.Name, route.Filter)
 	}
@@ -258,7 +272,7 @@ func (settings *Settings) toBridgeConfig() bridge.Config {
 	return bridge.Config{
 		NATSURL:         settings.NATS.URL,
 		ClientID:        settings.Connection.ClientID,
-		MQTT:            settings.Connection.toBrokerOptions(),
+		MQTT:            settings.Connection.toBrokerOptions(settings.Bridge.Ordered),
 		QueueSize:       settings.Bridge.QueueSize,
 		DropOldest:      settings.Bridge.DropPolicy == "oldest",
 		MaxPending:      settings.NATS.MaxPending,
@@ -274,8 +288,9 @@ func (settings *Settings) toBridgeConfig() bridge.Config {
 }
 
 // toBrokerOptions converts the MQTT connection settings into broker.Options.
-func (connection *Connection) toBrokerOptions() broker.Options {
+func (connection *Connection) toBrokerOptions(ordered bool) broker.Options {
 	return broker.Options{
+		Ordered:          ordered,
 		Host:             connection.Host,
 		Port:             connection.Port,
 		Username:         connection.Username,

@@ -11,8 +11,8 @@ type message struct {
 // queue holds messages between one route's MQTT client and its NATS publisher. It never
 // blocks the MQTT client: when the queue is full, a message is dropped and counted instead.
 //
-// It relies on having a single writer. The MQTT client calls its message handler for one
-// message at a time (paho's ordered mode), so add is never called concurrently.
+// add may be called from several goroutines at once: by default (without --ordered) paho runs the
+// message handler on a new goroutine for every message.
 type queue struct {
 	messages   chan message
 	dropOldest bool
@@ -45,20 +45,22 @@ func (q *queue) add(received message) {
 		return
 	}
 
-	// Take out the oldest message to make room. The publisher may have taken one out in the
-	// meantime, in which case there is room already and nothing is dropped.
-	select {
-	case <-q.messages:
-		q.dropped.Add(1)
-	default:
-	}
+	// Take out the oldest message to make room, then try again. Another add running at the
+	// same time can fill the freed slot first, so this repeats until the message fits. Each
+	// round drops one old message to make room for one new one, so the count stays right.
+	// When the publisher takes a message out in the meantime, there is room without dropping.
+	for {
+		select {
+		case <-q.messages:
+			q.dropped.Add(1)
+		default:
+		}
 
-	// Only add writes to the queue, so there is room now. The default case can't happen; it
-	// is there so a mistake shows up as a counted drop instead of a stuck MQTT client.
-	select {
-	case q.messages <- received:
-	default:
-		q.dropped.Add(1)
+		select {
+		case q.messages <- received:
+			return
+		default:
+		}
 	}
 }
 

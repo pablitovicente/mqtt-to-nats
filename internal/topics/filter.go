@@ -96,13 +96,30 @@ func NeedsPrefix(filter string) bool {
 // ValidatePrefix checks that prefix can go in front of every subject: dot-separated tokens,
 // none empty, none a wildcard, no whitespace, valid UTF-8 without NUL or DEL.
 func ValidatePrefix(prefix string) error {
-	if !utf8.ValidString(prefix) || strings.ContainsAny(prefix, "\x00\x7f\t\n\f\r ") {
-		return fmt.Errorf("prefix %q must be valid UTF-8 without whitespace, NUL or DEL", prefix)
+	return validatePlainSubject("prefix", prefix)
+}
+
+// ValidateSubject checks a fixed subject that a route publishes every message to. It follows
+// the same rules as a prefix, and may not start with '$', which NATS uses for its own subjects
+// such as $JS.API.
+func ValidateSubject(subject string) error {
+	if strings.HasPrefix(subject, "$") {
+		return fmt.Errorf("subject %q must not start with '$', which NATS uses for its own subjects", subject)
 	}
 
-	for token := range strings.SplitSeq(prefix, ".") {
+	return validatePlainSubject("subject", subject)
+}
+
+// validatePlainSubject checks that value is a subject without wildcards. kind names it in the
+// error message.
+func validatePlainSubject(kind, value string) error {
+	if !utf8.ValidString(value) || strings.ContainsAny(value, "\x00\x7f\t\n\f\r ") {
+		return fmt.Errorf("%s %q must be valid UTF-8 without whitespace, NUL or DEL", kind, value)
+	}
+
+	for token := range strings.SplitSeq(value, ".") {
 		if token == "" || token == "*" || token == ">" {
-			return fmt.Errorf("prefix %q must be dot-separated names, none empty and none '*' or '>'", prefix)
+			return fmt.Errorf("%s %q must be dot-separated names, none empty and none '*' or '>'", kind, value)
 		}
 	}
 

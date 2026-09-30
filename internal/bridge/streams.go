@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
-
-	"github.com/pablitovicente/mqtt-to-nats/v2/internal/topics"
 )
 
 // StreamSettings are the settings every stream gets.
@@ -48,7 +46,7 @@ func streamsFromRoutes(routes []Route) []stream {
 			streams = append(streams, stream{name: route.Stream})
 		}
 
-		streams[index].subjects = append(streams[index].subjects, topics.StreamSubjects(route.Filter, route.Prefix)...)
+		streams[index].subjects = append(streams[index].subjects, route.StreamSubjects()...)
 	}
 
 	return streams

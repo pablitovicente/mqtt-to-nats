@@ -72,9 +72,16 @@ func (jetStream *fakeJetStream) PublishMsg(_ context.Context, msg *nats.Msg, _ .
 	return nil, errors.New("nats unavailable")
 }
 
-// publishAll sends messages through a publisher backed by jetStream, drains it as shutdown
-// does, and waits until both of its goroutines have finished.
+// publishAll sends messages through a publisher with prefix "mqtt" backed by jetStream, drains
+// it as shutdown does, and waits until both of its goroutines have finished.
 func publishAll(t *testing.T, jetStream *fakeJetStream, duplicateWindow time.Duration, messages ...message) *publisher {
+	t.Helper()
+
+	return publishAllWith(t, jetStream, "mqtt", "", duplicateWindow, messages...)
+}
+
+// publishAllWith is publishAll with the publisher's prefix and fixed subject given.
+func publishAllWith(t *testing.T, jetStream *fakeJetStream, prefix, fixedSubject string, duplicateWindow time.Duration, messages ...message) *publisher {
 	t.Helper()
 
 	messageQueue := newQueue(len(messages), false)
@@ -83,7 +90,7 @@ func publishAll(t *testing.T, jetStream *fakeJetStream, duplicateWindow time.Dur
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	routePublisher := newPublisher("telemetry", "mqtt", jetStream, messageQueue, duplicateWindow, logger)
+	routePublisher := newPublisher("telemetry", prefix, fixedSubject, jetStream, messageQueue, duplicateWindow, logger)
 
 	// A closed drain makes run publish what is queued and then return, as on shutdown.
 	drain := make(chan struct{})
@@ -94,6 +101,20 @@ func publishAll(t *testing.T, jetStream *fakeJetStream, duplicateWindow time.Dur
 	routePublisher.confirm(context.Background(), pending)
 
 	return routePublisher
+}
+
+func TestPublisher_FixedSubject(t *testing.T) {
+	jetStream := &fakeJetStream{}
+	publishAllWith(t, jetStream, "", "TELEMETRY", time.Minute,
+		message{topic: "telemetry/device42", payload: []byte("one")},
+		message{topic: "telemetry/device 43", payload: []byte("two")},
+	)
+
+	for _, published := range jetStream.published {
+		if published.Subject != "TELEMETRY" {
+			t.Errorf("subject = %q, want TELEMETRY", published.Subject)
+		}
+	}
 }
 
 func TestPublisher_Stored(t *testing.T) {

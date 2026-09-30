@@ -13,6 +13,11 @@ Rewritten with Cobra, split into packages, and tested. 1.x releases remain avail
   rules (`telemetry/temperature` becomes `telemetry.temperature`). Bytes NATS doesn't allow in subjects, such as
   spaces, are written as `/` and two hex digits (`/20`). `--prefix` puts a fixed start in
   front of every subject.
+- `--subject` (or `subject:` in the routes file) publishes every message of a route to one
+  fixed subject, as 1.x did with the stream's name.
+- The MQTT library (paho) handles every message on its own goroutine instead of one at a
+  time, which is faster. Messages can reach NATS in a different order than they arrived.
+  `--ordered` brings back one at a time, in arrival order.
 - The bridge refuses to start when two filters overlap, when two routes' subjects overlap, or
   when a filter starting with `+`, `#` or `$` has no prefix.
 - Messages wait in a memory queue per route between MQTT and NATS, so a slow NATS doesn't hold
@@ -34,8 +39,8 @@ Rewritten with Cobra, split into packages, and tested. 1.x releases remain avail
 - Subscriptions are sent again after every reconnect, with clean and persistent sessions. 1.x
   received nothing after a reconnect whenever the broker had no session for it: always with a
   clean session, and with a persistent one when the broker lost it (EMQX does under load).
-- A subscription the broker refuses is an error at startup. paho reports a refusal only in
-  the subscribe result, so it used to look like a success.
+- A subscription the broker refuses is an error at startup. The MQTT library (paho) reports a
+  refusal only in the subscribe result, so it used to look like a success.
 
 ### Bugs fixed
 

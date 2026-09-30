@@ -13,6 +13,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/pablitovicente/mqtt-to-nats/v2/internal/broker"
+	"github.com/pablitovicente/mqtt-to-nats/v2/internal/topics"
 )
 
 // Route is one MQTT topic filter and the stream its messages go to.
@@ -21,7 +22,22 @@ type Route struct {
 	Filter string
 	Stream string
 	Prefix string
-	QoS    int
+
+	// Subject, when set, is the one subject every message of the route is published to,
+	// instead of a subject built from its topic. It can't be combined with Prefix.
+	Subject string
+
+	QoS int
+}
+
+// StreamSubjects returns the subjects the route's stream needs: its fixed subject when it has
+// one, otherwise the subjects built from its filter and prefix.
+func (route Route) StreamSubjects() []string {
+	if route.Subject != "" {
+		return []string{route.Subject}
+	}
+
+	return topics.StreamSubjects(route.Filter, route.Prefix)
 }
 
 // Config is everything Run needs. The cli package has already checked it.
@@ -32,7 +48,7 @@ type Config struct {
 	// <ClientID>-<route name>.
 	ClientID string
 
-	// MQTT is how every route's client connects. Run sets Ordered and OnMessage itself.
+	// MQTT is how every route's client connects. Run sets OnMessage itself.
 	MQTT broker.Options
 
 	// QueueSize and DropOldest set up each route's memory queue.

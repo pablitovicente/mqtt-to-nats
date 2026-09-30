@@ -3,6 +3,7 @@ package bridge
 import (
 	"slices"
 	"strconv"
+	"sync"
 	"testing"
 )
 
@@ -47,27 +48,36 @@ func TestQueue_DropOldest(t *testing.T) {
 }
 
 // TestQueue_CountsAddUpWithAReader checks, with a reader running at the same time as the
-// writer, that every message is either read or counted as dropped.
+// writers, that every message is either read or counted as dropped. Several writers is what
+// paho does without --ordered.
 func TestQueue_CountsAddUpWithAReader(t *testing.T) {
 	for _, dropOldest := range []bool{false, true} {
-		q := newQueue(16, dropOldest)
-		const total = 100000
+		for _, writerCount := range []int{1, 8} {
+			q := newQueue(16, dropOldest)
+			const perWriter = 20000
+			total := uint64(perWriter * writerCount)
 
-		readCount := make(chan int)
-		go func() {
-			count := 0
-			for range q.receive() {
-				count++
+			readCount := make(chan int)
+			go func() {
+				count := 0
+				for range q.receive() {
+					count++
+				}
+				readCount <- count
+			}()
+
+			var writers sync.WaitGroup
+			for range writerCount {
+				writers.Go(func() { fill(q, perWriter) })
 			}
-			readCount <- count
-		}()
+			writers.Wait()
+			close(q.messages)
 
-		fill(q, total)
-		close(q.messages)
-
-		read := <-readCount
-		if uint64(read)+q.dropped.Load() != total {
-			t.Errorf("dropOldest %v: read %d + dropped %d != %d", dropOldest, read, q.dropped.Load(), total)
+			read := <-readCount
+			if uint64(read)+q.dropped.Load() != total {
+				t.Errorf("dropOldest %v, %d writers: read %d + dropped %d != %d",
+					dropOldest, writerCount, read, q.dropped.Load(), total)
+			}
 		}
 	}
 }

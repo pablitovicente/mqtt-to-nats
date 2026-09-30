@@ -19,6 +19,13 @@ const (
 	// mqttDisconnectWait is how long the MQTT client may take to send what it still has
 	// queued when disconnecting.
 	mqttDisconnectWait = 250 * time.Millisecond
+
+	// lateHandlerWait is how long to wait after disconnecting from MQTT before storing what is
+	// left in the queue. Without --ordered paho runs each message's handler on its own
+	// goroutine and doesn't wait for them when disconnecting, so a message can still be on its
+	// way into the queue. Without this wait it could land there after the last drain and never
+	// be stored.
+	lateHandlerWait = 200 * time.Millisecond
 )
 
 // runningRoute is one route's MQTT client, queue, NATS connection and publisher.
@@ -62,7 +69,7 @@ func startRoute(ctx context.Context, route Route, config Config, logger *slog.Lo
 		return nil, fmt.Errorf("route %q: %w", route.Name, err)
 	}
 
-	routeLogger.Info("route started", "filter", route.Filter, "stream", route.Stream, "clientID", clientID, "qos", route.QoS)
+	routeLogger.Info("route started", "filter", route.Filter, "stream", route.Stream, "clientID", clientID, "qos", route.QoS, "ordered", config.MQTT.Ordered)
 
 	return &runningRoute{
 		name:           route.Name,
@@ -113,7 +120,7 @@ func connectToNATS(config Config, clientID string, logger *slog.Logger) (*nats.C
 // queued messages after everything else has been told to stop.
 func startPublisher(route Route, config Config, jetStream jetStreamPublisher, logger *slog.Logger) (*queue, *publisher, publisherControl) {
 	messageQueue := newQueue(config.QueueSize, config.DropOldest)
-	routePublisher := newPublisher(route.Name, route.Prefix, jetStream, messageQueue, config.Streams.DuplicateWindow, logger)
+	routePublisher := newPublisher(route.Name, route.Prefix, route.Subject, jetStream, messageQueue, config.Streams.DuplicateWindow, logger)
 
 	publisherContext, cancel := context.WithCancel(context.Background())
 	control := publisherControl{
@@ -135,7 +142,6 @@ func startPublisher(route Route, config Config, jetStream jetStreamPublisher, lo
 // connectToMQTT connects the route's MQTT client, delivering every message into messageQueue,
 // and subscribes to the route's filter.
 func connectToMQTT(ctx context.Context, route Route, options broker.Options, clientID string, messageQueue *queue, logger *slog.Logger) (*broker.Client, error) {
-	options.Ordered = true
 	options.OnMessage = func(topic string, payload []byte) {
 		messageQueue.add(message{topic: topic, payload: payload})
 	}
@@ -161,13 +167,16 @@ func connectToMQTT(ctx context.Context, route Route, options broker.Options, cli
 
 // stop shuts the route down without losing queued messages where it can:
 //  1. disconnect from MQTT, so no new messages arrive
-//  2. let the publisher store what is left in the queue and wait for NATS to confirm it
-//  3. close the NATS connection
+//  2. wait lateHandlerWait for handlers still running to put their messages in the queue
+//  3. let the publisher store what is left in the queue and wait for NATS to confirm it
+//  4. close the NATS connection
 //
 // If shutdownContext ends first, the publisher is stopped right away and whatever it hadn't
 // stored yet is lost; the summary's leftInQueue shows how much was still queued.
 func (route *runningRoute) stop(shutdownContext context.Context) {
 	route.mqttClient.Disconnect(mqttDisconnectWait)
+
+	time.Sleep(lateHandlerWait)
 
 	close(route.control.drain)
 

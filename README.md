@@ -59,9 +59,12 @@ routes:
     filter: alarms/+/temperature
     stream: EVENTS        # shares the stream with events
     prefix: bridge
+  - name: doors
+    filter: doors/#
+    subject: DOORS        # every message on this one subject; default: built from the topic
 ```
 
-`--routes` can't be combined with `--topic`, `--qos`, `--stream` or `--prefix`. Unknown keys
+`--routes` can't be combined with `--topic`, `--qos`, `--stream`, `--prefix` or `--subject`. Unknown keys
 in the file are an error. With flags only, the route's name is the stream name.
 
 The bridge refuses to start when:
@@ -102,6 +105,12 @@ removing the prefix. A fuzz test checks that every topic comes back unchanged.
 
 With `--prefix bridge`, subjects become `bridge.telemetry.device42.temperature`.
 
+With `--subject TELEMETRY` (or `subject:` in the routes file), every message of the route goes
+to the subject `TELEMETRY` and its topic isn't kept, as in 1.x. A subject can't be combined
+with a prefix, can't contain wildcards and can't start with `$`. Two routes can't use the same
+subject, even when they share a stream. A route with a subject needs no prefix, even for a
+filter like `#`.
+
 When testing against NATS's own MQTT support, give every route a prefix. NATS hands the
 bridge's publishes back to MQTT subscribers, and without a prefix the bridge receives its own
 messages again, in a loop.
@@ -110,12 +119,13 @@ messages again, in a loop.
 
 Each route stores into a stream. Without `stream:`, the stream is named after the route, so
 every route gets its own stream. Routes that name the same stream share it: the bridge creates
-one stream with the subjects of all of them. The routes file under "Run" creates two streams:
+one stream with the subjects of all of them. The routes file under "Run" creates three streams:
 
 | Stream | Subjects | Routes |
 |---|---|---|
 | `telemetry` | `telemetry.>`, `telemetry` | telemetry |
 | `EVENTS` | `bridge.events.>`, `bridge.events`, `bridge.alarms.*.temperature` | events, alarms |
+| `doors` | `DOORS` | doors |
 
 A filter ending in `/#` gets two subjects, because MQTT's `telemetry/#` also matches the topic
 `telemetry` itself and NATS's `telemetry.>` doesn't. With one route from flags, `--stream`
@@ -173,6 +183,12 @@ message it already stored, as long as the retry comes within `--duplicate-window
 redelivery arrives as a new message with a new ID, so it can't be caught this way.
 
 ## Tuning
+
+By default the MQTT library (paho) handles every message on a goroutine of its own, so messages
+can reach NATS in a different order than the broker sent them. `--ordered` makes the MQTT library
+hand each route's messages to the bridge one at a time, in the order they arrive. In a test on
+one machine (8 routes, 1,000,000 messages, NATS's MQTT as the broker), ordering off stored about
+19% more messages per second and used 10% less CPU. With either setting every message is counted, stored or dropped the same way.
 
 `--queue-size` (default 100000) is how many messages each route holds between MQTT and NATS.
 It absorbs bursts and short NATS slowdowns. Memory is about queue size times message size.
@@ -244,3 +260,32 @@ path with `--routes`.
 
 2.0.0 changes flags, defaults and how messages are stored. The "2.0.0" section of
 `CHANGELOG.md` lists every change.
+
+### Running like 1.x
+
+1.x subscribed to one filter and published every message to one subject, the stream's name.
+`--subject` does the same:
+
+```bash
+# 1.x
+mqtt-to-nats -h broker -t 'telemetry/#' -SN TELEMETRY -N nats://nats:4222 -R 3 -S file -bufferSize 1024
+
+# 2.0.0
+mqtt-to-nats -h broker -t 'telemetry/#' --stream TELEMETRY --subject TELEMETRY -N nats://nats:4222 -R 3 -S file --nats-max-pending 1024
+```
+
+Consumers that read the stream in 1.x keep working. What still differs:
+
+| | 1.x | 2.0.0 |
+|---|---|---|
+| Headers | none | `Nats-Msg-Id` |
+| Stream's duplicate window | NATS's default (2 minutes) | `--duplicate-window` (30s) |
+| MQTT session | clean | persistent; add `--cleanSession` for 1.x behavior |
+| MQTT client ID | `mqtt-to-nats-bridge` | `mqtt-to-nats-bridge-TELEMETRY` |
+| Order of messages in the stream | as received | can differ from arrival order; `--ordered` keeps it |
+
+Without `--subject`, each message goes to a subject built from its topic
+(`telemetry.device42.temperature`), and the stream's subjects are `telemetry.>` and
+`telemetry`. A consumer with no filter subject still reads every message; one filtering on
+`TELEMETRY` gets nothing. Starting without `--subject` on a stream 1.x created changes its
+subjects, and the messages already in it keep the subject `TELEMETRY`.

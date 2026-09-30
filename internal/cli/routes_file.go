@@ -17,11 +17,12 @@ type routesFile struct {
 // routeInFile is one route as written in the file. QoS is a pointer so a missing qos can be
 // told apart from qos: 0.
 type routeInFile struct {
-	Name   string `yaml:"name"`
-	Filter string `yaml:"filter"`
-	Stream string `yaml:"stream"`
-	Prefix string `yaml:"prefix"`
-	QoS    *int   `yaml:"qos"`
+	Name    string `yaml:"name"`
+	Filter  string `yaml:"filter"`
+	Stream  string `yaml:"stream"`
+	Prefix  string `yaml:"prefix"`
+	Subject string `yaml:"subject"`
+	QoS     *int   `yaml:"qos"`
 }
 
 // loadRoutesFile reads the routes from a YAML file and fills in the defaults: the stream name
@@ -45,11 +46,12 @@ func loadRoutesFile(path string) ([]Route, error) {
 	routes := make([]Route, 0, len(contents.Routes))
 	for _, inFile := range contents.Routes {
 		route := Route{
-			Name:   inFile.Name,
-			Filter: inFile.Filter,
-			Stream: inFile.Stream,
-			Prefix: inFile.Prefix,
-			QoS:    1,
+			Name:    inFile.Name,
+			Filter:  inFile.Filter,
+			Stream:  inFile.Stream,
+			Prefix:  inFile.Prefix,
+			Subject: inFile.Subject,
+			QoS:     1,
 		}
 
 		if route.Stream == "" {
