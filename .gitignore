@@ -1,3 +1,4 @@
-mqtt-to-nats
 .vscode/
 .idea
+bin/
+_local_testing/
