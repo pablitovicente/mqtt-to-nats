@@ -69,7 +69,7 @@ func startRoute(ctx context.Context, route Route, config Config, logger *slog.Lo
 		return nil, fmt.Errorf("route %q: %w", route.Name, err)
 	}
 
-	routeLogger.Info("route started", "filter", route.Filter, "stream", route.Stream, "clientID", clientID, "qos", route.QoS, "ordered", config.MQTT.Ordered)
+	routeLogger.Info("route started", "filter", route.Filter, "stream", route.Stream, "clientID", clientID, "qos", route.QoS, "ordered", config.MQTT.Ordered, "messageIDs", config.MessageIDs)
 
 	return &runningRoute{
 		name:           route.Name,
@@ -120,7 +120,7 @@ func connectToNATS(config Config, clientID string, logger *slog.Logger) (*nats.C
 // queued messages after everything else has been told to stop.
 func startPublisher(route Route, config Config, jetStream jetStreamPublisher, logger *slog.Logger) (*queue, *publisher, publisherControl) {
 	messageQueue := newQueue(config.QueueSize, config.DropOldest)
-	routePublisher := newPublisher(route.Name, route.Prefix, route.Subject, jetStream, messageQueue, config.Streams.DuplicateWindow, logger)
+	routePublisher := newPublisher(route.Name, route.Prefix, route.Subject, config.MessageIDs, jetStream, messageQueue, config.Streams.DuplicateWindow, logger)
 
 	publisherContext, cancel := context.WithCancel(context.Background())
 	control := publisherControl{

@@ -58,6 +58,10 @@ type Config struct {
 	// MaxPending is how many publishes each route may have waiting for NATS to confirm.
 	MaxPending int
 
+	// MessageIDs adds a Nats-Msg-Id header to every message, so NATS doesn't store a retried
+	// message twice.
+	MessageIDs bool
+
 	// StatsInterval is how often every route's counters are logged.
 	StatsInterval time.Duration
 

@@ -72,6 +72,21 @@ func TestRoot_Defaults(t *testing.T) {
 	if settings.Bridge.Ordered {
 		t.Error("ordered defaults to true, want false")
 	}
+
+	if !settings.toBridgeConfig().MessageIDs {
+		t.Error("message IDs default to off, want on")
+	}
+}
+
+func TestRoot_MessageIDsOff(t *testing.T) {
+	settings, err := runCommand(t, "--message-ids=false")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if settings.toBridgeConfig().MessageIDs {
+		t.Error("message IDs on, want off from --message-ids=false")
+	}
 }
 
 func TestRoot_FixedSubjectLike1x(t *testing.T) {

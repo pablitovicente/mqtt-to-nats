@@ -41,6 +41,7 @@ type NATS struct {
 	Replicas        int
 	Storage         string
 	MaxPending      int
+	MessageIDs      bool
 	DuplicateWindow time.Duration
 }
 
@@ -276,6 +277,7 @@ func (settings *Settings) toBridgeConfig() bridge.Config {
 		QueueSize:       settings.Bridge.QueueSize,
 		DropOldest:      settings.Bridge.DropPolicy == "oldest",
 		MaxPending:      settings.NATS.MaxPending,
+		MessageIDs:      settings.NATS.MessageIDs,
 		StatsInterval:   settings.Bridge.StatsInterval,
 		ShutdownTimeout: settings.Bridge.ShutdownTimeout,
 		Streams: bridge.StreamSettings{

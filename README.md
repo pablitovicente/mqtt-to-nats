@@ -171,6 +171,7 @@ the old subscription stays in the persistent session and its messages keep arriv
 |---|---|
 | A route's queue is full | The newest message is dropped (`--drop oldest` drops the oldest instead) and counted |
 | NATS fails to store a message | It is retried with the same message ID until `--duplicate-window` runs out, then counted as failed |
+| NATS stored a message but its confirmation was lost, with `--message-ids=false` | The retry stores it a second time |
 | Ctrl-C | The bridge stops reading MQTT, stores what is queued, and waits for NATS to confirm it, for up to `--shutdown-timeout` |
 | The bridge crashes | Messages in the queue and those waiting for NATS to confirm them are lost |
 | The broker redelivers after a reconnect | Messages the broker sent again are stored again |
@@ -181,6 +182,12 @@ them. That keeps the bridge fast, and is why a crash loses what was queued.
 Every message carries `Nats-Msg-Id: <route>-<start time>-<counter>`. NATS ignores a retry of a
 message it already stored, as long as the retry comes within `--duplicate-window`. A broker
 redelivery arrives as a new message with a new ID, so it can't be caught this way.
+
+`--message-ids=false` publishes without the header. NATS then has no IDs to keep or check.
+Messages are still retried until `--duplicate-window` runs out, and a retry of a message NATS
+had already stored stores it twice. That can only happen to messages waiting for confirmation
+when something goes wrong, up to `--nats-max-pending` per route. The stats count those
+messages as stored like any other.
 
 ## Tuning
 
@@ -202,6 +209,10 @@ values stall because of a nats.go bug
 `--duplicate-window` (default 30s) is how long a stream remembers message IDs, and how long a
 failed publish is retried. NATS keeps every ID in the window in memory: at 250,000 messages
 per second, 30 seconds is 7.5 million IDs.
+
+`--message-ids` (default true) adds the `Nats-Msg-Id` header to every message. NATS checks
+each ID against the ones it remembers, which slows storing down. `--message-ids=false` skips
+that work; see "When messages are lost or stored twice" for what it costs.
 
 ## Stats
 

@@ -146,6 +146,9 @@ func registerNATSFlags(flags *pflag.FlagSet, nats *NATS) {
 	// as of nats.go v1.54.0).
 	flags.IntVar(&nats.MaxPending, "nats-max-pending", 4000,
 		"Publishes each client may have waiting for NATS to confirm before it waits")
+	flags.BoolVar(&nats.MessageIDs, "message-ids", true,
+		"Add a Nats-Msg-Id header to every message, so NATS doesn't store a retried message twice. "+
+			"With --message-ids=false a retry can store a message twice")
 	flags.DurationVar(&nats.DuplicateWindow, "duplicate-window", 30*time.Second,
 		"How long every stream remembers message IDs, so a retried publish isn't stored twice. "+
 			"NATS keeps every ID in this window in memory; retries stop when it runs out")

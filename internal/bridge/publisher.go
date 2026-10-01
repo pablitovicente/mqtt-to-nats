@@ -44,6 +44,7 @@ type publisher struct {
 	routeName       string
 	prefix          string
 	fixedSubject    string
+	messageIDs      bool
 	jetStream       jetStreamPublisher
 	queue           *queue
 	duplicateWindow time.Duration
@@ -59,11 +60,12 @@ type publisher struct {
 	failed  atomic.Uint64
 }
 
-func newPublisher(routeName, prefix, fixedSubject string, jetStream jetStreamPublisher, messageQueue *queue, duplicateWindow time.Duration, logger *slog.Logger) *publisher {
+func newPublisher(routeName, prefix, fixedSubject string, messageIDs bool, jetStream jetStreamPublisher, messageQueue *queue, duplicateWindow time.Duration, logger *slog.Logger) *publisher {
 	return &publisher{
 		routeName:       routeName,
 		prefix:          prefix,
 		fixedSubject:    fixedSubject,
+		messageIDs:      messageIDs,
 		jetStream:       jetStream,
 		queue:           messageQueue,
 		duplicateWindow: duplicateWindow,
@@ -117,8 +119,10 @@ func (publisher *publisher) publish(ctx context.Context, received message, pendi
 	msg := nats.NewMsg(subject)
 	msg.Data = received.payload
 
-	publisher.nextMessageID++
-	msg.Header.Set(jetstream.MsgIDHeader, publisher.messageIDPrefix+strconv.FormatUint(publisher.nextMessageID, 10))
+	if publisher.messageIDs {
+		publisher.nextMessageID++
+		msg.Header.Set(jetstream.MsgIDHeader, publisher.messageIDPrefix+strconv.FormatUint(publisher.nextMessageID, 10))
+	}
 
 	giveUpAt := time.Now().Add(publisher.duplicateWindow)
 
@@ -176,7 +180,8 @@ func (publisher *publisher) confirm(ctx context.Context, pending <-chan pendingP
 
 // retryUntilStored publishes msg again, waiting for each attempt, until NATS stores it or
 // giveUpAt passes. The message ID stays the same, so if an earlier attempt was stored after
-// all, NATS ignores the repeat. firstError is why the first attempt failed.
+// all, NATS ignores the repeat. Without message IDs that repeat is stored a second time.
+// firstError is why the first attempt failed.
 func (publisher *publisher) retryUntilStored(ctx context.Context, msg *nats.Msg, giveUpAt time.Time, firstError error) {
 	lastError := firstError
 

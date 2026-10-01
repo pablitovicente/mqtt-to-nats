@@ -18,6 +18,8 @@ Rewritten with Cobra, split into packages, and tested. 1.x releases remain avail
 - The MQTT library (paho) handles every message on its own goroutine instead of one at a
   time, which is faster. Messages can reach NATS in a different order than they arrived.
   `--ordered` brings back one at a time, in arrival order.
+- `--message-ids=false` publishes without the `Nats-Msg-Id` header. NATS stores faster, and a
+  retried message can be stored twice.
 - The bridge refuses to start when two filters overlap, when two routes' subjects overlap, or
   when a filter starting with `+`, `#` or `$` has no prefix.
 - Messages wait in a memory queue per route between MQTT and NATS, so a slow NATS doesn't hold

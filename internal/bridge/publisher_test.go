@@ -77,11 +77,12 @@ func (jetStream *fakeJetStream) PublishMsg(_ context.Context, msg *nats.Msg, _ .
 func publishAll(t *testing.T, jetStream *fakeJetStream, duplicateWindow time.Duration, messages ...message) *publisher {
 	t.Helper()
 
-	return publishAllWith(t, jetStream, "mqtt", "", duplicateWindow, messages...)
+	return publishAllWith(t, jetStream, "mqtt", "", true, duplicateWindow, messages...)
 }
 
-// publishAllWith is publishAll with the publisher's prefix and fixed subject given.
-func publishAllWith(t *testing.T, jetStream *fakeJetStream, prefix, fixedSubject string, duplicateWindow time.Duration, messages ...message) *publisher {
+// publishAllWith is publishAll with the publisher's prefix, fixed subject and message IDs
+// setting given.
+func publishAllWith(t *testing.T, jetStream *fakeJetStream, prefix, fixedSubject string, messageIDs bool, duplicateWindow time.Duration, messages ...message) *publisher {
 	t.Helper()
 
 	messageQueue := newQueue(len(messages), false)
@@ -90,7 +91,7 @@ func publishAllWith(t *testing.T, jetStream *fakeJetStream, prefix, fixedSubject
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	routePublisher := newPublisher("telemetry", prefix, fixedSubject, jetStream, messageQueue, duplicateWindow, logger)
+	routePublisher := newPublisher("telemetry", prefix, fixedSubject, messageIDs, jetStream, messageQueue, duplicateWindow, logger)
 
 	// A closed drain makes run publish what is queued and then return, as on shutdown.
 	drain := make(chan struct{})
@@ -103,9 +104,24 @@ func publishAllWith(t *testing.T, jetStream *fakeJetStream, prefix, fixedSubject
 	return routePublisher
 }
 
+func TestPublisher_WithoutMessageIDs(t *testing.T) {
+	jetStream := &fakeJetStream{}
+	routePublisher := publishAllWith(t, jetStream, "mqtt", "", false, time.Minute,
+		message{topic: "telemetry/device42", payload: []byte("one")},
+	)
+
+	if routePublisher.stored.Load() != 1 {
+		t.Errorf("stored %d, want 1", routePublisher.stored.Load())
+	}
+
+	if messageID := jetStream.published[0].Header.Get(jetstream.MsgIDHeader); messageID != "" {
+		t.Errorf("message ID = %q, want none", messageID)
+	}
+}
+
 func TestPublisher_FixedSubject(t *testing.T) {
 	jetStream := &fakeJetStream{}
-	publishAllWith(t, jetStream, "", "TELEMETRY", time.Minute,
+	publishAllWith(t, jetStream, "", "TELEMETRY", true, time.Minute,
 		message{topic: "telemetry/device42", payload: []byte("one")},
 		message{topic: "telemetry/device 43", payload: []byte("two")},
 	)
